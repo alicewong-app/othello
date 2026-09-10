@@ -1,0 +1,174 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Flask Othello</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background-color: #2c3e50;
+            color: #ecf0f1;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            min-height: 100vh;
+            margin: 0;
+        }
+
+        h1 {
+            margin-bottom: 10px;
+        }
+
+        .scoreboard {
+            display: flex;
+            gap: 20px;
+            font-size: 1.2rem;
+            margin-bottom: 15px;
+            background-color: #34495e;
+            padding: 10px 20px;
+            border-radius: 8px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+        }
+
+        .status {
+            font-size: 1.3rem;
+            font-weight: bold;
+            margin-bottom: 20px;
+            color: #f1c40f;
+        }
+
+        .board {
+            display: grid;
+            grid-template-columns: repeat(8, 60px);
+            grid-template-rows: repeat(8, 60px);
+            gap: 2px;
+            background-color: #111;
+            padding: 5px;
+            border-radius: 4px;
+            box-shadow: 0 10px 25px rgba(0,0,0,0.3);
+        }
+
+        .cell {
+            background-color: #27ae60;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            position: relative;
+            border: none;
+            padding: 0;
+            cursor: default;
+        }
+
+        /* The pieces */
+        .piece {
+            width: 48px;
+            height: 48px;
+            border-radius: 50%;
+            box-shadow: inset -3px -3px 5px rgba(0,0,0,0.4), 2px 2px 4px rgba(0,0,0,0.3);
+            transition: all 0.3s ease;
+        }
+
+        .piece.B {
+            background-color: #111;
+        }
+
+        .piece.W {
+            background-color: #fff;
+        }
+
+        /* Valid Move Hint Indicator */
+        .valid-btn {
+            width: 100%;
+            height: 100%;
+            background: transparent;
+            border: none;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .hint {
+            width: 16px;
+            height: 16px;
+            border-radius: 50%;
+            background-color: rgba(241, 196, 15, 0.6);
+            transition: transform 0.2s;
+        }
+
+        .valid-btn:hover .hint {
+            transform: scale(1.4);
+            background-color: rgba(241, 196, 15, 0.9);
+        }
+
+        .controls {
+            margin-top: 25px;
+        }
+
+        .btn-reset {
+            padding: 10px 20px;
+            font-size: 1rem;
+            background-color: #e74c3c;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+            transition: background 0.2s;
+        }
+
+        .btn-reset:hover {
+            background-color: #c0392b;
+        }
+    </style>
+</head>
+<body>
+
+    <h1>Othello</h1>
+
+    <div class="scoreboard">
+        <span>⚫ Black: <strong>{{ black_score }}</strong></span>
+        <span>⚪ White: <strong>{{ white_score }}</strong></span>
+    </div>
+
+    <div class="status">
+        {% if winner %}
+            🎉 {{ winner }}
+        {% else %}
+            Current Turn: {% if turn == 'B' %}⚫ Black{% else %}⚪ White{% endif %}
+        {% endif %}
+    </div>
+
+    <div class="board">
+        {% for r in range(8) %}
+            {% for c in range(8) %}
+                <div class="cell">
+                    
+                    {% if board[r][c] != ' ' %}
+                        <!-- Render a placed piece -->
+                        <div class="piece {{ board[r][c] }}"></div>
+                    
+                    {% elif (r, c) in valid_moves and not winner %}
+                        <!-- Render an interactive click zone if it's a valid move -->
+                        <form action="/move" method="POST" class="valid-btn">
+                            <input type="hidden" name="row" value="{{ r }}">
+                            <input type="hidden" name="col" value="{{ c }}">
+                            <button type="submit" class="valid-btn">
+                                <div class="hint"></div>
+                            </button>
+                        </form>
+                    {% endif %}
+
+                </div>
+            {% endfor %}
+        {% endfor %}
+    </div>
+
+    <div class="controls">
+        <a href="/reset"><button class="btn-reset">Restart Game</button></a>
+    </div>
+
+</body>
+</html>
