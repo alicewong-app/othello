@@ -1,0 +1,17 @@
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Virtual Environments
+.venv/
+venv/
+ENV/
+env/
+
+# Instance folder (Flask specific secrets)
+instance/
+
+# Operating system files
+.DS_Store
+Thumbs.db
