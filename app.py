@@ -1,121 +1,127 @@
-from flask import Flask, render_template, request, redirect, url_for
+from flask import Flask, render_template, request, redirect, url_for, session
+import os
 
 app = Flask(__name__)
+# FIXED: Hardcoded fallback key ensures you aren't kicked out of the game when Flask reloads code
+app.secret_key = os.environ.get('SECRET_KEY', 'othello_secret_dev_key_123')
 
-# Game state constants
-EMPTY = ' '
-BLACK = 'B'
-WHITE = 'W'
+# Initial board state function to easily reset
+def get_initial_board():
+    board = [[0 for _ in range(8)] for _ in range(8)]
+    board[3][3], board[3][4], board[4][3], board[4][4] = 1, -1, -1, 1
+    return board
 
-def reset_game():
-    """Initializes an 8x8 Othello board and game state."""
-    board = [[EMPTY for _ in range(8)] for _ in range(8)]
-    # Starting 4 pieces in the center
-    board[3][3], board[4][4] = WHITE, WHITE
-    board[3][4], board[4][3] = BLACK, BLACK
-    return {
-        'board': board,
-        'turn': BLACK,
-        'winner': None
-    }
+def flip_tiles(board, x, y, player):
+    directions = [(-1, -1), (-1, 0), (-1, 1), (0, -1), (0, 1), (1, -1), (1, 0), (1, 1)]
+    for dx, dy in directions:
+        if 0 <= x + dx < 8 and 0 <= y + dy < 8 and board[x + dx][y + dy] == -player:
+            tiles_to_flip = []
+            i, j = x + dx, y + dy
+            while 0 <= i < 8 and 0 <= j < 8 and board[i][j] == -player:
+                tiles_to_flip.append((i, j))
+                i += dx
+                j += dy
+            if 0 <= i < 8 and 0 <= j < 8 and board[i][j] == player:
+                for tx, ty in tiles_to_flip:
+                    board[tx][ty] = player
 
-# Global game state for simplicity (Use sessions/database for production)
-game_state = reset_game()
+def is_valid_move(board, x, y, player):
+    if board[x][y] != 0:
+        return False
+    directions = [(-1, -1), (-1, 0), (-1, 1), (0, -1), (0, 1), (1, -1), (1, 0), (1, 1)]
+    for dx, dy in directions:
+        i, j = x + dx, y + dy
+        if 0 <= i < 8 and 0 <= j < 8 and board[i][j] == -player:
+            while 0 <= i < 8 and 0 <= j < 8 and board[i][j] == -player:
+                i += dx
+                j += dy
+            if 0 <= i < 8 and 0 <= j < 8 and board[i][j] == player:
+                return True
+    return False
 
-# All 8 directions around a cell: (row_delta, col_delta)
-DIRECTIONS = [(-1, -1), (-1, 0), (-1, 1), (0, -1), (0, 1), (1, -1), (1, 0), (1, 1)]
-
-def get_flips(board, row, col, player):
-    """Returns a list of coordinate tuples that would be flipped if 'player' moves to (row, col)."""
-    if board[row][col] != EMPTY:
-        return []
-        
-    opponent = WHITE if player == BLACK else BLACK
-    to_flip = []
-    
-    for dr, dc in DIRECTIONS:
-        r, c = row + dr, col + dc
-        direction_flips = []
-        
-        # Walk in this direction as long as we see the opponent's pieces
-        while 0 <= r < 8 and 0 <= c < 8 and board[r][c] == opponent:
-            direction_flips.append((r, c))
-            r += dr
-            c += dc
-            
-        # If the walk ends on the current player's piece, the pieces in between are captured
-        if 0 <= r < 8 and 0 <= c < 8 and board[r][c] == player:
-            to_flip.extend(direction_flips)
-            
-    return to_flip
-
-def get_valid_moves(board, player):
-    """Returns a set of (row, col) tuples where 'player' can legally move."""
-    valid_moves = set()
+# Helper to check if a player has *any* legal moves left on the board
+def has_valid_moves(board, player):
     for r in range(8):
         for c in range(8):
-            if get_flips(board, r, c, player):
-                valid_moves.add((r, c))
-    return valid_moves
+            if is_valid_move(board, r, c, player):
+                return True
+    return False
 
 @app.route('/')
 def index():
-    player_moves = get_valid_moves(game_state['board'], game_state['turn'])
+    # Initialize game state in user session if it doesn't exist
+    if 'board' not in session:
+        session['board'] = get_initial_board()
+        session['current_player'] = 1  # 1 = Black, -1 = White
+        session['game_over'] = False
+        session['winner'] = ""
+
+    board = session['board']
     
     # Calculate scores
-    black_score = sum(row.count(BLACK) for row in game_state['board'])
-    white_score = sum(row.count(WHITE) for row in game_state['board'])
-    
-    return render_template('index.html', 
-                           board=game_state['board'], 
-                           turn=game_state['turn'], 
-                           valid_moves=player_moves,
-                           black_score=black_score,
-                           white_score=white_score,
-                           winner=game_state['winner'])
+    black_score = sum(row.count(1) for row in board)
+    white_score = sum(row.count(-1) for row in board)
 
-@app.route('/move', methods=['POST'])
-def make_move():
-    row = int(request.form.get('row'))
-    col = int(request.form.get('col'))
-    player = game_state['turn']
-    
-    flips = get_flips(game_state['board'], row, col, player)
-    
-    if flips:
-        # Place the new piece
-        game_state['board'][row][col] = player
-        # Flip the captured pieces
-        for r, c in flips:
-            game_state['board'][r][c] = player
-            
-        # Switch turn to the next player
-        next_player = WHITE if player == BLACK else BLACK
+    return render_template(
+        'index.html', 
+        board=board, 
+        current_player=session['current_player'],
+        black_score=black_score,
+        white_score=white_score,
+        game_over=session.get('game_over', False),
+        winner=session.get('winner', "")
+    )
+
+@app.route('/play', methods=['POST'])
+def play():
+    if 'board' not in session or session.get('game_over', False):
+        return redirect(url_for('index'))
+
+    # FIXED: Deep-copy the board array out of the session to ensure updates register correctly
+    board = [list(row) for row in session['board']]
+    player = session['current_player']
+
+    x = int(request.form['x'])
+    y = int(request.form['y'])
+
+    if is_valid_move(board, x, y, player):
+        board[x][y] = player
+        flip_tiles(board, x, y, player)
         
-        # Check if the next player has any moves
-        if get_valid_moves(game_state['board'], next_player):
-            game_state['turn'] = next_player
-        # If not, current player keeps playing if they have moves
-        elif get_valid_moves(game_state['board'], player):
-            pass 
-        # Game over if neither player has moves
-        else:
-            black_score = sum(row.count(BLACK) for row in game_state['board'])
-            white_score = sum(row.count(WHITE) for row in game_state['board'])
+        next_player = -player
+        
+        # Check for valid moves to see if game continues
+        if has_valid_moves(board, next_player):
+            player = next_player
+        elif not has_valid_moves(board, player):
+            # GAME OVER: Neither player has legal moves left
+            session['game_over'] = True
+            
+            # Count final pieces to determine the winner
+            black_score = sum(row.count(1) for row in board)
+            white_score = sum(row.count(-1) for row in board)
+            
             if black_score > white_score:
-                game_state['winner'] = 'Black Wins!'
+                session['winner'] = "Black Wins!"
             elif white_score > black_score:
-                game_state['winner'] = 'White Wins!'
+                session['winner'] = "White Wins!"
             else:
-                game_state['winner'] = 'Tie Game!'
-                
+                session['winner'] = "It's a Tie!"
+        
+        # FIXED: Reassign the completely new copy back to the session block
+        session['board'] = board
+        session['current_player'] = player
+        session.modified = True
+
     return redirect(url_for('index'))
 
 @app.route('/reset')
 def reset():
-    global game_state
-    game_state = reset_game()
+    session.pop('board', None)
+    session.pop('current_player', None)
+    session.pop('game_over', None)
+    session.pop('winner', None)
     return redirect(url_for('index'))
 
 if __name__ == '__main__':
-    app.run(debug=True)
+    app.run(host='0.0.0.0', port=5000, debug=True)
