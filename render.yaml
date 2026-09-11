@@ -3,4 +3,4 @@ services:
     name: othello
     runtime: python
     buildCommand: pip install -r requirements.txt
-    startCommand: gunicorn main:app # Change 'app:app' to match your main file
+    startCommand: gunicorn app:app # Change 'app:app' to match your main file
